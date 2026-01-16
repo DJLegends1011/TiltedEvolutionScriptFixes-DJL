@@ -7,6 +7,7 @@ struct NiPoint3;
 struct TESForm;
 struct TESObjectREFR;
 struct Actor;
+struct ImageSpaceModifierInstance;
 
 struct GridCellArray
 {
@@ -42,10 +43,16 @@ struct TES
     int32_t currentGridX;
     int32_t currentGridY;
     TESObjectCELL* interiorCell;
+    TESObjectCELL** interiorBuffer;
+    TESObjectCELL** exteriorBuffer;
+    uint8_t padD8[0x108 - 0xD8];
+    GameValueList<NiPointer<ImageSpaceModifierInstance>> activeImageSpaceModifiers;
 };
 
 static_assert(offsetof(TES, cells) == 0x78);
 static_assert(offsetof(TES, interiorCell) == 0xC0);
+static_assert(offsetof(TES, exteriorBuffer) == 0xD0);
+static_assert(offsetof(TES, activeImageSpaceModifiers) == 0x108);
 
 struct ProcessLists
 {
