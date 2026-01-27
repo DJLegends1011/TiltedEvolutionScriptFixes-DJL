@@ -22,9 +22,11 @@ ai_mr () {
   fi
   diff=$(git diff master)
   if [ "$3" = "explain" ]; then
-    echo "PR diff: $diff. Suppose you wrote the code in the git PR diff above. Provide a brief summary of this PR, ignore any files that are not critical to the code, i.e: package-json.lock, and state the changes you made to existing code in markdown format, and in first person."| $command
+    cat <<EOF | $command PR diff: $diff. Suppose you wrote the code in the git PR diff above. Provide a brief summary of this PR, ignore any files that are not critical to the code, i.e: package-json.lock, and state the changes you made to existing code in markdown format, and in first person.
+EOF
   elif [ "$3" = "review" ]; then
-    echo "Review this code: $diff, provide suggestions for improvement, coding best practices, improve readability, and maintainability. Remove any code smells and anti-patterns. Provide code examples for your suggestion. Respond in markdown format. If the file does not have any code or does not need any changes, say 'No changes needed'."| $command
+    cat <<EOF | $command Review this code: $diff, provide suggestions for improvement, coding best practices, improve readability, and maintainability. Remove any code smells and anti-patterns. Provide code examples for your suggestion. Respond in markdown format. If the file does not have any code or does not need any changes, say 'No changes needed'."| $command
+EOF
   fi
 }
 
