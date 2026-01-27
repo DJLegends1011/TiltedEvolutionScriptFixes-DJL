@@ -3,7 +3,7 @@
 ai_mr () {
   echo "Moving to: $1"
   cd $1 
-  git checkout master
+  git checkout dev
   git pull
   echo "Repository is up to date"
   echo "Checking out branch: $2"
@@ -20,7 +20,7 @@ ai_mr () {
   elif [ "$3" = "explain" ]; then
     echo "Explaining MR for branch $2"
   fi
-  diff=$(git diff master)
+  diff=$(git diff dev)
   if [ "$3" = "explain" ]; then
     echo "PR diff: $diff. Suppose you wrote the code in the git PR diff above. Provide a brief summary of this PR, ignore any files that are not critical to the code, i.e: package-json.lock, and state the changes you made to existing code in markdown format, and in first person."| $command
   elif [ "$3" = "review" ]; then
