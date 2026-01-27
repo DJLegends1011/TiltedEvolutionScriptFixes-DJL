@@ -12,8 +12,8 @@ ai_mr () {
   
   command="ollama.exe run deepseek-coder:6.7b"
   echo "Using DeepSeek Coder's 6.7b model for code review."
-  #echo $(git branch --show)
-  echo $(git rev-parse --abbrev-ref HEAD)
+  echo $(git branch --show)
+  #echo $(git rev-parse --abbrev-ref HEAD) for older git versions
   echo $pwd
   if [ "$3" = "review" ]; then
     echo "Reviewing MR for branch $2"
