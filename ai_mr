@@ -10,7 +10,7 @@ ai_mr () {
   echo Review or explain:$3
   git checkout $2
   
-  command="ollama run deepseek-coder:6.7b-instruct"
+  command="ollama run deepseek-coder:6.7b"
   echo "Using DeepSeek Coder's 6.7b model for code review."
   echo $pwd
   echo $(git branch --show)
