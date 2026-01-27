@@ -12,8 +12,8 @@ ai_mr () {
   
   command="ollama run deepseek-coder:6.7b"
   echo "Using DeepSeek Coder's 6.7b model for code review."
+  echo $(git branch --show-current)
   echo $pwd
-  echo $(git branch --show)
   if [ "$3" = "review" ]; then
     echo "Reviewing MR for branch $2"
   elif [ "$3" = "explain" ]; then
