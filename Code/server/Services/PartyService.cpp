@@ -18,11 +18,22 @@
 #include <Messages/PartyChangeLeaderRequest.h>
 #include <Messages/PartyKickRequest.h>
 #include <Messages/NotifyPlayerJoined.h>
+#include <Messages/NotifyPartyPositions.h>
+#include <Messages/PartyPositionUpdateRequest.h>
+#include <Messages/PartyPositionsRequest.h>
+#include <Messages/PartyActorNamesRequest.h>
+#include <Messages/PartyOptionsUpdateRequest.h>
+#include <Messages/NotifyPartyOptions.h>
+#include <Messages/NotifyPartyLeaderCellLock.h>
+#include <Messages/NotifyPlayerActorName.h>
 
 #include <Setting.h>
+#include <Services/PlayerLocationService.h>
 namespace
 {
 Console::Setting bAutoPartyJoin{"Gameplay:bAutoPartyJoin", "Join parties automatically, as long as there is only one party in the server", true};
+Console::Setting uPartyCellLockCountdown{"Gameplay:uPartyCellLockCountdown", "Seconds before party members are teleported to the leader's new cell", 3u};
+Console::Setting uPartyCellLockSnapshotDelay{"Gameplay:uPartyCellLockSnapshotDelay", "Milliseconds to wait before capturing leader position for party cell lock", 3000u};
 }
 
 PartyService::PartyService(World& aWorld, entt::dispatcher& aDispatcher) noexcept
@@ -36,6 +47,10 @@ PartyService::PartyService(World& aWorld, entt::dispatcher& aDispatcher) noexcep
     , m_partyCreateConnection(aDispatcher.sink<PacketEvent<PartyCreateRequest>>().connect<&PartyService::OnPartyCreate>(this))
     , m_partyChangeLeaderConnection(aDispatcher.sink<PacketEvent<PartyChangeLeaderRequest>>().connect<&PartyService::OnPartyChangeLeader>(this))
     , m_partyKickConnection(aDispatcher.sink<PacketEvent<PartyKickRequest>>().connect<&PartyService::OnPartyKick>(this))
+    , m_partyPositionUpdateConnection(aDispatcher.sink<PacketEvent<PartyPositionUpdateRequest>>().connect<&PartyService::OnPartyPositionUpdate>(this))
+    , m_partyPositionsRequestConnection(aDispatcher.sink<PacketEvent<PartyPositionsRequest>>().connect<&PartyService::OnPartyPositionsRequest>(this))
+    , m_partyActorNamesRequestConnection(aDispatcher.sink<PacketEvent<PartyActorNamesRequest>>().connect<&PartyService::OnPartyActorNamesRequest>(this))
+    , m_partyOptionsUpdateConnection(aDispatcher.sink<PacketEvent<PartyOptionsUpdateRequest>>().connect<&PartyService::OnPartyOptionsUpdate>(this))
 {
 }
 
@@ -79,6 +94,113 @@ PartyService::Party* PartyService::GetPlayerParty(Player* const apPlayer) noexce
 void PartyService::OnUpdate(const UpdateEvent& acEvent) noexcept
 {
     const auto cCurrentTick = GameServer::Get()->GetTick();
+
+    for (auto it = m_parties.begin(); it != m_parties.end(); ++it)
+    {
+        auto& party = const_cast<Party&>(it->second);
+        if (!party.PendingCellLockNotify || cCurrentTick < party.PendingCellLockNotifyAt)
+            continue;
+
+        party.PendingCellLockNotify = false;
+
+        if (!party.Options.LockPartyToLeaderCell())
+            continue;
+
+        Player* pLeader = m_world.GetPlayerManager().GetById(party.PendingCellLockLeaderId);
+        if (!pLeader)
+            continue;
+
+        UpdateLeaderCellSnapshot(party, pLeader);
+        NotifyPartyLeaderCellLock(party, pLeader, false);
+    }
+
+    // Periodic broadcast of party member positions (every ~500ms)
+    if (m_nextPositionsBroadcast <= cCurrentTick)
+    {
+        m_nextPositionsBroadcast = cCurrentTick + 500;
+
+        for (auto& [partyId, party] : m_parties)
+        {
+            NotifyPartyPositions msg{};
+            // Build one message containing all members' positions and cells
+            for (auto* pPlayer : party.Members)
+            {
+                NotifyPartyPositions::Entry e{};
+                e.PlayerId = pPlayer->GetId();
+
+                // Position from MovementComponent if character exists
+                bool hasMovement = false;
+                bool isInterior = false;
+                if (auto optChar = pPlayer->GetCharacter())
+                {
+                    if (m_world.valid(*optChar) && m_world.any_of<MovementComponent>(*optChar))
+                    {
+                        const auto& move = m_world.get<MovementComponent>(*optChar);
+                        e.Position.x = move.Position.x;
+                        e.Position.y = move.Position.y;
+                        e.Position.z = move.Position.z;
+                        hasMovement = true;
+
+                        Vector3_NetQuantize pos{};
+                        pos.x = move.Position.x;
+                        pos.y = move.Position.y;
+                        pos.z = move.Position.z;
+                        m_world.GetPlayerLocationService().UpdateLocation(pPlayer, pos, pPlayer->GetCellComponent().WorldSpaceId,
+                                                                          pPlayer->GetCellComponent().Cell, PlayerLocation::Source::Movement);
+                    }
+                }
+                // Worldspace / Cell
+                const auto& cell = pPlayer->GetCellComponent();
+                e.WorldSpaceId = cell.WorldSpaceId;
+                e.CellId = cell.Cell;
+                isInterior = !cell.WorldSpaceId;
+
+                PlayerLocation location{};
+                if (m_world.GetPlayerLocationService().TryGetLocation(pPlayer->GetId(), location))
+                {
+                    if (!hasMovement && location.HasPosition)
+                    {
+                        e.Position = location.Position;
+                        if (location.WorldSpaceId)
+                            e.WorldSpaceId = location.WorldSpaceId;
+                        if (location.CellId)
+                            e.CellId = location.CellId;
+                        hasMovement = true;
+                        isInterior = !location.WorldSpaceId;
+                    }
+
+                    if (location.HasExterior && (!e.WorldSpaceId || !hasMovement))
+                    {
+                        e.Position = location.LastExteriorPosition;
+                        e.WorldSpaceId = location.LastExteriorWorldSpaceId;
+                        e.CellId = location.LastExteriorCellId;
+                        hasMovement = true;
+                        // Keep interior flag from actual state when using exterior fallback.
+                    }
+                }
+
+                e.IsInterior = isInterior;
+                if (hasMovement)
+                    msg.Entries.push_back(e);
+            }
+
+            // Send to each party member
+            TiltedPhoques::Vector<ConnectionId_t> members;
+            members.reserve(party.Members.size());
+            for (auto* pPlayer : party.Members)
+            {
+                if (pPlayer)
+                    members.push_back(pPlayer->GetConnectionId());
+            }
+
+            for (auto connectionId : members)
+            {
+                if (auto* pPlayer = m_world.GetPlayerManager().GetByConnectionId(connectionId))
+                    pPlayer->Send(msg);
+            }
+        }
+    }
+
     if (m_nextInvitationExpire > cCurrentTick)
         return;
 
@@ -104,6 +226,135 @@ void PartyService::OnUpdate(const UpdateEvent& acEvent) noexcept
     }
 }
 
+
+
+void PartyService::OnPartyPositionUpdate(const PacketEvent<PartyPositionUpdateRequest>& acPacket) noexcept
+{
+    Player* const pSender = acPacket.pPlayer;
+    auto* pParty = GetPlayerParty(pSender);
+    if (!pParty)
+        return;
+
+    const auto& msgIn = acPacket.Packet;
+
+    m_world.GetPlayerLocationService().UpdateLocation(pSender, msgIn.Position, msgIn.WorldSpaceId, msgIn.CellId,
+                                                      PlayerLocation::Source::ClientReport);
+
+    NotifyPartyPositions out{};
+    NotifyPartyPositions::Entry e{};
+    e.PlayerId = pSender->GetId();
+    e.Position = msgIn.Position;
+    e.WorldSpaceId = msgIn.WorldSpaceId;
+    e.CellId = msgIn.CellId;
+    out.Entries.push_back(e);
+
+    for (auto* pMember : pParty->Members)
+    {
+        if (pMember == pSender)
+            continue; // don't need to echo to the sender
+        pMember->Send(out);
+    }
+}
+
+void PartyService::OnPartyPositionsRequest(const PacketEvent<PartyPositionsRequest>& acPacket) noexcept
+{
+    Player* const pSender = acPacket.pPlayer;
+    auto* pParty = GetPlayerParty(pSender);
+    if (!pParty)
+        return;
+
+    NotifyPartyPositions msg{};
+    for (auto* pPlayer : pParty->Members)
+    {
+        NotifyPartyPositions::Entry e{};
+        e.PlayerId = pPlayer->GetId();
+        bool hasPosition = false;
+        bool isInterior = false;
+
+        const auto& cell = pPlayer->GetCellComponent();
+        e.WorldSpaceId = cell.WorldSpaceId;
+        e.CellId = cell.Cell;
+        isInterior = !cell.WorldSpaceId;
+
+        PlayerLocation location{};
+        if (m_world.GetPlayerLocationService().TryGetLocation(pPlayer->GetId(), location))
+        {
+            if (location.HasPosition)
+            {
+                e.Position = location.Position;
+                if (location.WorldSpaceId)
+                    e.WorldSpaceId = location.WorldSpaceId;
+                if (location.CellId)
+                    e.CellId = location.CellId;
+                hasPosition = true;
+                isInterior = !location.WorldSpaceId;
+            }
+
+            if (location.HasExterior && (!e.WorldSpaceId || !hasPosition))
+            {
+                e.Position = location.LastExteriorPosition;
+                e.WorldSpaceId = location.LastExteriorWorldSpaceId;
+                e.CellId = location.LastExteriorCellId;
+                hasPosition = true;
+                // Keep interior flag from actual state when using exterior fallback.
+            }
+        }
+        e.IsInterior = isInterior;
+        if (hasPosition)
+            msg.Entries.push_back(e);
+    }
+
+    pSender->Send(msg);
+}
+
+void PartyService::OnPartyActorNamesRequest(const PacketEvent<PartyActorNamesRequest>& acPacket) noexcept
+{
+    Player* const pSender = acPacket.pPlayer;
+    auto* pParty = GetPlayerParty(pSender);
+    if (!pParty)
+        return;
+
+    for (auto* pMember : pParty->Members)
+    {
+        const auto& actorName = pMember->GetActorName();
+        if (actorName.empty())
+            continue;
+
+        NotifyPlayerActorName notify{};
+        notify.PlayerId = pMember->GetId();
+        notify.ActorName = actorName;
+        pSender->Send(notify);
+    }
+}
+
+void PartyService::OnPartyOptionsUpdate(const PacketEvent<PartyOptionsUpdateRequest>& acPacket) noexcept
+{
+    Player* const pSender = acPacket.pPlayer;
+    auto* pParty = GetPlayerParty(pSender);
+    if (!pParty)
+        return;
+
+    if (pParty->LeaderPlayerId != pSender->GetId())
+        return;
+
+    const bool wasCellLockEnabled = pParty->Options.LockPartyToLeaderCell();
+    pParty->Options = acPacket.Packet.Options;
+
+    NotifyPartyOptions notify{};
+    notify.Options = pParty->Options;
+    GameServer::Get()->SendToParty(notify, pSender->GetParty());
+
+    if (wasCellLockEnabled && !pParty->Options.LockPartyToLeaderCell())
+    {
+        pParty->PendingCellLockNotify = false;
+        NotifyPartyLeaderCellLock(*pParty, pSender, true);
+    }
+    else if (!wasCellLockEnabled && pParty->Options.LockPartyToLeaderCell())
+    {
+        ScheduleLeaderCellLockNotify(*pParty, pSender);
+    }
+}
+
 void PartyService::OnPartyCreate(const PacketEvent<PartyCreateRequest>& acPacket) noexcept
 {
     Player* const player = acPacket.pPlayer;
@@ -124,9 +375,17 @@ void PartyService::OnPartyCreate(const PacketEvent<PartyCreateRequest>& acPacket
 
         if (m_parties.size() == 1 && bAutoPartyJoin)
         {
+            TiltedPhoques::Vector<ConnectionId_t> otherPlayers;
+            otherPlayers.reserve(m_world.GetPlayerManager().Count());
             for (Player* otherPlayer : m_world.GetPlayerManager())
             {
-                if (otherPlayer->GetId() != player->GetId())
+                otherPlayers.push_back(otherPlayer->GetConnectionId());
+            }
+
+            for (auto connectionId : otherPlayers)
+            {
+                Player* otherPlayer = m_world.GetPlayerManager().GetByConnectionId(connectionId);
+                if (otherPlayer && otherPlayer->GetId() != player->GetId())
                 {
                     party.Members.push_back(otherPlayer);
                     otherPlayer->GetParty().JoinedPartyId = partyId;
@@ -208,6 +467,7 @@ void PartyService::OnPlayerJoin(const PlayerJoinEvent& acEvent) noexcept
     NotifyPlayerJoined notify{};
     notify.PlayerId = acEvent.pPlayer->GetId();
     notify.Username = acEvent.pPlayer->GetUsername();
+    notify.Avatar = acEvent.pPlayer->GetAvatar();
 
     notify.WorldSpaceId = acEvent.WorldSpaceId;
     notify.CellId = acEvent.CellId;
@@ -217,6 +477,18 @@ void PartyService::OnPlayerJoin(const PlayerJoinEvent& acEvent) noexcept
     spdlog::debug("[Party] New notify player {:x} {}", notify.PlayerId, notify.Username.c_str());
 
     GameServer::Get()->SendToPlayers(notify, acEvent.pPlayer);
+
+    for (Player* player : m_world.GetPlayerManager())
+    {
+        const auto& actorName = player->GetActorName();
+        if (actorName.empty())
+            continue;
+
+        NotifyPlayerActorName actorNotify{};
+        actorNotify.PlayerId = player->GetId();
+        actorNotify.ActorName = actorName;
+        acEvent.pPlayer->Send(actorNotify);
+    }
 
     if (m_parties.size() == 1 && bAutoPartyJoin)
     {
@@ -237,7 +509,7 @@ void PartyService::OnPlayerJoin(const PlayerJoinEvent& acEvent) noexcept
                 break;
             }
         }
-        
+
     }
 }
 
@@ -390,9 +662,18 @@ void PartyService::RemovePlayerFromParty(Player* apPlayer) noexcept
 void PartyService::BroadcastPlayerList(Player* apPlayer) const noexcept
 {
     auto pIgnoredPlayer = apPlayer;
+    TiltedPhoques::Vector<ConnectionId_t> players;
+    players.reserve(m_world.GetPlayerManager().Count());
+
     for (auto pSelf : m_world.GetPlayerManager())
     {
-        if (pIgnoredPlayer == pSelf)
+        players.push_back(pSelf->GetConnectionId());
+    }
+
+    for (auto selfId : players)
+    {
+        auto pSelf = m_world.GetPlayerManager().GetByConnectionId(selfId);
+        if (!pSelf || pIgnoredPlayer == pSelf)
             continue;
 
         NotifyPlayerList playerList;
@@ -404,7 +685,10 @@ void PartyService::BroadcastPlayerList(Player* apPlayer) const noexcept
             if (pIgnoredPlayer == pPlayer)
                 continue;
 
-            playerList.Players[pPlayer->GetId()] = pPlayer->GetUsername();
+            NotifyPlayerList::PlayerListEntry entry{};
+            entry.Name = pPlayer->GetUsername();
+            entry.Avatar = pPlayer->GetAvatar();
+            playerList.Players[pPlayer->GetId()] = std::move(entry);
         }
 
         pSelf->Send(playerList);
@@ -428,10 +712,21 @@ void PartyService::BroadcastPartyInfo(uint32_t aPartyId) const noexcept
         message.PlayerIds.push_back(pPlayer->GetId());
     }
 
+    TiltedPhoques::Vector<ConnectionId_t> memberIds;
+    memberIds.reserve(members.size());
     for (auto pPlayer : members)
     {
-        message.IsLeader = pPlayer->GetId() == party.LeaderPlayerId;
-        pPlayer->Send(message);
+        if (pPlayer)
+            memberIds.push_back(pPlayer->GetConnectionId());
+    }
+
+    for (auto connectionId : memberIds)
+    {
+        if (auto* pPlayer = m_world.GetPlayerManager().GetByConnectionId(connectionId))
+        {
+            message.IsLeader = pPlayer->GetId() == party.LeaderPlayerId;
+            pPlayer->Send(message);
+        }
     }
 }
 
@@ -446,4 +741,104 @@ void PartyService::SendPartyJoinedEvent(Party& aParty, Player* aPlayer) noexcept
     }
     spdlog::debug("[PartyService]: Sending party join event to player");
     aPlayer->Send(joinedMessage);
+
+    NotifyPartyOptions optionsMessage{};
+    optionsMessage.Options = aParty.Options;
+    aPlayer->Send(optionsMessage);
+
+    if (aParty.Options.LockPartyToLeaderCell() && aParty.LeaderCell.HasLocation && aParty.LeaderPlayerId != aPlayer->GetId())
+    {
+        ::NotifyPartyLeaderCellLock notify{};
+        notify.WorldSpaceId = aParty.LeaderCell.WorldSpaceId;
+        notify.CellId = aParty.LeaderCell.CellId;
+        notify.Position = aParty.LeaderCell.Position;
+        notify.CountdownSeconds = uPartyCellLockCountdown.value_as<uint16_t>();
+        notify.Cancelled = false;
+        aPlayer->Send(notify);
+    }
+}
+
+void PartyService::UpdateLeaderCellSnapshot(Party& aParty, Player* apLeader) noexcept
+{
+    if (!apLeader)
+        return;
+
+    const auto& cellComponent = apLeader->GetCellComponent();
+    if (!cellComponent.Cell && !cellComponent.WorldSpaceId)
+        return;
+
+    Vector3_NetQuantize position{};
+    bool hasPosition = false;
+
+    if (auto optCharacter = apLeader->GetCharacter())
+    {
+        if (m_world.valid(*optCharacter) && m_world.any_of<MovementComponent>(*optCharacter))
+        {
+            const auto& move = m_world.get<MovementComponent>(*optCharacter);
+            position.x = move.Position.x;
+            position.y = move.Position.y;
+            position.z = move.Position.z;
+            hasPosition = true;
+        }
+    }
+
+    if (!hasPosition)
+    {
+        PlayerLocation location{};
+        if (m_world.GetPlayerLocationService().TryGetLocation(apLeader->GetId(), location))
+        {
+            if (location.HasPosition)
+            {
+                position = location.Position;
+                hasPosition = true;
+            }
+            else if (location.HasExterior)
+            {
+                position = location.LastExteriorPosition;
+                hasPosition = true;
+            }
+        }
+    }
+
+    if (!hasPosition)
+        return;
+
+    aParty.LeaderCell.WorldSpaceId = cellComponent.WorldSpaceId;
+    aParty.LeaderCell.CellId = cellComponent.Cell;
+    aParty.LeaderCell.Position = position;
+    aParty.LeaderCell.HasLocation = true;
+}
+
+void PartyService::ScheduleLeaderCellLockNotify(Party& aParty, Player* apLeader) noexcept
+{
+    if (!apLeader)
+        return;
+
+    aParty.PendingCellLockNotify = true;
+    aParty.PendingCellLockNotifyAt =
+        GameServer::Get()->GetTick() + uPartyCellLockSnapshotDelay.value_as<uint32_t>();
+    aParty.PendingCellLockLeaderId = apLeader->GetId();
+}
+
+void PartyService::NotifyPartyLeaderCellLock(Party& aParty, Player* apLeader, bool aCancelled) noexcept
+{
+    if (!aParty.LeaderCell.HasLocation && !aCancelled)
+        return;
+
+    ::NotifyPartyLeaderCellLock notify{};
+    notify.WorldSpaceId = aParty.LeaderCell.WorldSpaceId;
+    notify.CellId = aParty.LeaderCell.CellId;
+    notify.Position = aParty.LeaderCell.Position;
+    notify.CountdownSeconds = uPartyCellLockCountdown.value_as<uint16_t>();
+    notify.Cancelled = aCancelled;
+
+    for (auto* pMember : aParty.Members)
+    {
+        if (!pMember)
+            continue;
+        if (apLeader && pMember->GetId() == apLeader->GetId())
+            continue;
+
+        pMember->Send(notify);
+    }
 }

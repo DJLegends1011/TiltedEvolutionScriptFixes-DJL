@@ -6,12 +6,15 @@ import {
   autoHideTimerLengths,
   FontSize,
   PartyAnchor,
+  PartyLayout,
+  PlayerNamePreference,
   SettingService,
 } from 'src/app/services/setting.service';
 import { Sound, SoundService } from '../../services/sound.service';
 import { environment } from 'src/environments/environment';
 import { HttpClient } from '@angular/common/http';
 import { ClientService } from 'src/app/services/client.service';
+import { NametagMode } from 'src/app/models/nametag-mode.enum';
 
 @Component({
   selector: 'app-settings',
@@ -45,8 +48,48 @@ export class SettingsComponent {
       label: 'COMPONENT.SETTINGS.PARTY_ANCHOR_POSITION.BOTTOM_RIGHT',
     },
   ];
+  readonly availableNametagModes: { id: NametagMode; label: string }[] = [
+    {
+      id: NametagMode.Normal,
+      label: 'COMPONENT.SETTINGS.NAMETAG_MODES.NORMAL',
+    },
+    {
+      id: NametagMode.Detailed,
+      label: 'COMPONENT.SETTINGS.NAMETAG_MODES.DETAILED',
+    },
+    {
+      id: NametagMode.Basic,
+      label: 'COMPONENT.SETTINGS.NAMETAG_MODES.BASIC',
+    },
+    {
+      id: NametagMode.Hidden,
+      label: 'COMPONENT.SETTINGS.NAMETAG_MODES.HIDDEN',
+    },
+  ];
+  readonly availablePlayerNamePreferences: {
+    id: PlayerNamePreference;
+    label: string;
+  }[] = [
+    {
+      id: PlayerNamePreference.USERNAME,
+      label: 'COMPONENT.SETTINGS.PLAYER_NAME_PREFERENCES.USERNAME',
+    },
+    {
+      id: PlayerNamePreference.ACTOR,
+      label: 'COMPONENT.SETTINGS.PLAYER_NAME_PREFERENCES.ACTOR',
+    },
+  ];
   readonly availableAutoHideTimes = autoHideTimerLengths;
-
+  readonly availablePartyLayouts: { id: PartyLayout; label: string }[] = [
+    {
+      id: PartyLayout.CLASSIC,
+      label: 'COMPONENT.SETTINGS.PARTY_LAYOUTS.CLASSIC',
+    },
+    {
+      id: PartyLayout.COMPACT,
+      label: 'COMPONENT.SETTINGS.PARTY_LAYOUTS.COMPACT',
+    },
+  ];
   public settings = this.settingService.settings;
   public autoHideTime: number;
   public partyAnchor: PartyAnchor;
@@ -69,7 +112,9 @@ export class SettingsComponent {
     private readonly http: HttpClient,
     private readonly client: ClientService,
   ) {
-    this.clientVersion$ = this.client.versionSet.pipe(map(version => version.split('-')[0]));
+    this.clientVersion$ = this.client.versionSet.pipe(
+      map(version => version.split('-')[0]),
+    );
   }
 
   ngOnInit(): void {
@@ -82,9 +127,7 @@ export class SettingsComponent {
   }
 
   private getVersionTagList(): Promise<Tag[]> {
-    return lastValueFrom(
-      this.http
-        .get<Tag[]>(`${ environment.githubUrl }`));
+    return lastValueFrom(this.http.get<Tag[]>(`${environment.githubUrl}`));
   }
 
   async isGameVersionOutdated(): Promise<boolean> {

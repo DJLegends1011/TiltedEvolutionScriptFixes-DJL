@@ -1,7 +1,11 @@
 #pragma once
 #include "Structs/Inventory.h"
 #include "Structs/ActorData.h"
+#include "Structs/SyncMode.h"
+#include <Events/EventDispatcher.h>
+#include <Games/Events.h>
 
+struct TESLoadGameEvent;
 struct ActorAddedEvent;
 struct ActorRemovedEvent;
 struct UpdateEvent;
@@ -40,6 +44,7 @@ struct SubtitleEvent;
 struct NotifySubtitle;
 struct NotifyActorTeleport;
 struct NotifyRelinquishControl;
+struct NotifyDrawWeapon;
 struct PartyJoinedEvent;
 
 struct Actor;
@@ -49,7 +54,7 @@ struct TransportService;
 /**
  * @brief Handles actors and players.
  */
-struct CharacterService
+struct CharacterService : BSTEventSink<TESLoadGameEvent>
 {
     CharacterService(World& aWorld, entt::dispatcher& aDispatcher, TransportService& aTransport) noexcept;
     ~CharacterService() noexcept = default;
@@ -87,11 +92,16 @@ struct CharacterService
     void OnNotifySubtitle(const NotifySubtitle& acMessage) noexcept;
     void OnNotifyActorTeleport(const NotifyActorTeleport& acMessage) noexcept;
     void OnNotifyRelinquishControl(const NotifyRelinquishControl& acMessage) noexcept;
+    void OnNotifyDrawWeapon(const NotifyDrawWeapon& acMessage) noexcept;
     void OnPartyJoinedEvent(const PartyJoinedEvent& acEvent) noexcept;
+    void OnSyncModeChanged(SyncMode aPreviousMode, SyncMode aCurrentMode) noexcept;
+    void RefreshRemotePlayer(uint32_t aServerId) noexcept;
+    BSTEventResult OnEvent(const TESLoadGameEvent*, const EventDispatcher<TESLoadGameEvent>*) override;
 
     void ProcessNewEntity(entt::entity aEntity) const noexcept;
 
 private:
+    void CleanupRemoteActorsAndOwnership(bool aFromLoad = false) const noexcept;
     void MoveActor(const Actor* apActor, const GameId& acWorldSpaceId, const GameId& acCellId, const Vector3_NetQuantize& acPosition) const noexcept;
 
     void RequestServerAssignment(entt::entity aEntity) const noexcept;
@@ -113,6 +123,7 @@ private:
     TransportService& m_transport;
 
     float m_cachedExperience = 0.f;
+    bool m_pendingLoadCleanup{false};
 
     // TODO: revamp this, read the local anim var like vampire lord?
     struct WeaponDrawData
@@ -157,5 +168,6 @@ private:
     entt::scoped_connection m_subtitleSyncConnection;
     entt::scoped_connection m_actorTeleportConnection;
     entt::scoped_connection m_relinquishConnection;
+    entt::scoped_connection m_notifyDrawWeaponConnection;
     entt::scoped_connection m_partyJoinedConnection;
 };

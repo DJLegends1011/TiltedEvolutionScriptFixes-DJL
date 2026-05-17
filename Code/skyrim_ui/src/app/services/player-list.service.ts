@@ -8,12 +8,14 @@ import { View } from '../models/view.enum';
 import { UiRepository } from '../store/ui.repository';
 import { ClientService } from './client.service';
 import { PopupNotificationService } from './popup-notification.service';
+import { SettingService } from './setting.service';
 
 @Injectable({
   providedIn: 'root',
 })
 export class PlayerListService implements OnDestroy {
   public playerList = new BehaviorSubject<PlayerList | undefined>(undefined);
+  private readonly defaultAvatar = 'assets/images/group/avatar-placeholder.png';
 
   private debugSubscription: Subscription;
   private connectionSubscription: Subscription;
@@ -22,6 +24,13 @@ export class PlayerListService implements OnDestroy {
   private memberKickedSubscription: Subscription;
   private cellSubscription: Subscription;
   private partyInviteReceivedSubscription: Subscription;
+  private teleportRequestSubscription: Subscription;
+  private teleportRequestHandledSubscription: Subscription;
+  private avatarSubscription: Subscription;
+  private actorNameSubscription: Subscription;
+  private nameSubscription: Subscription;
+  private localPlayerSubscription: Subscription;
+  private namePreferenceSubscription: Subscription;
 
   private isConnect = false;
 
@@ -30,6 +39,7 @@ export class PlayerListService implements OnDestroy {
     private readonly popupNotificationService: PopupNotificationService,
     private readonly uiRepository: UiRepository,
     private readonly translocoService: TranslocoService,
+    private readonly settingService: SettingService,
   ) {
     this.onDebug();
     this.onConnectionStateChanged();
@@ -38,6 +48,12 @@ export class PlayerListService implements OnDestroy {
     this.onMemberKicked();
     this.onCellChange();
     this.onPartyInviteReceived();
+    this.onTeleportRequest();
+    this.onTeleportRequestHandled();
+    this.onAvatarChange();
+    this.onActorNameChange();
+    this.onLocalPlayerMetadata();
+    this.onNamePreferenceChange();
   }
 
   ngOnDestroy() {
@@ -47,6 +63,13 @@ export class PlayerListService implements OnDestroy {
     this.playerDisconnectedSubscription.unsubscribe();
     this.cellSubscription.unsubscribe();
     this.partyInviteReceivedSubscription.unsubscribe();
+    this.teleportRequestSubscription.unsubscribe();
+    this.teleportRequestHandledSubscription.unsubscribe();
+    this.avatarSubscription.unsubscribe();
+    this.actorNameSubscription.unsubscribe();
+    this.nameSubscription.unsubscribe();
+    this.localPlayerSubscription.unsubscribe();
+    this.namePreferenceSubscription.unsubscribe();
   }
 
   private onDebug() {
@@ -65,6 +88,9 @@ export class PlayerListService implements OnDestroy {
         this.playerList.next(undefined);
 
         this.updatePlayerList();
+        if (connect) {
+          this.ensureLocalPlayerEntry();
+        }
       });
   }
 
@@ -74,8 +100,33 @@ export class PlayerListService implements OnDestroy {
         const playerList = this.getPlayerList();
 
         if (playerList) {
-          playerList.players.push(player);
-
+          const existing = playerList.players.find(
+            entry => entry.id === player.id,
+          );
+          if (existing) {
+            existing.name = player.name;
+            existing.level = player.level;
+            existing.cellName = player.cellName;
+            existing.connected = player.connected;
+            existing.online = player.online;
+            this.updateDisplayName(existing);
+            existing.avatar =
+              player.avatar && player.avatar.length > 0
+                ? player.avatar
+                : existing.avatar || this.defaultAvatar;
+          } else {
+            playerList.players.push(
+              new Player({
+                ...player,
+                avatar:
+                  player.avatar && player.avatar.length > 0
+                    ? player.avatar
+                    : this.defaultAvatar,
+              }),
+            );
+            const created = playerList.players[playerList.players.length - 1];
+            this.updateDisplayName(created);
+          }
           this.playerList.next(playerList);
         }
       });
@@ -133,14 +184,200 @@ export class PlayerListService implements OnDestroy {
           if (playerList) {
             const invitingPlayer = this.getPlayerById(inviterId);
             invitingPlayer.hasInvitedLocalPlayer = true;
+            this.updateDisplayName(invitingPlayer);
             this.playerList.next(playerList);
             this.popupNotificationService.addPartyInvite(
-              invitingPlayer.name,
+              invitingPlayer.displayName || invitingPlayer.name,
               () => this.acceptPartyInvite(inviterId),
             );
           }
         },
       );
+  }
+
+  private onTeleportRequest() {
+    this.teleportRequestSubscription =
+      this.clientService.teleportRequestChange.subscribe(
+        ({ requesterId, requesterName }) => {
+          const playerList = this.getPlayerList();
+          const player = playerList
+            ? this.getPlayerById(requesterId)
+            : undefined;
+          const displayName = this.resolveDisplayName(player, requesterName);
+
+          if (player && playerList) {
+            player.hasTeleportRequest = true;
+            this.playerList.next(playerList);
+          }
+
+          this.popupNotificationService.addTeleportRequest(
+            displayName,
+            () => {
+              if (player && playerList) {
+                player.hasTeleportRequest = false;
+                this.playerList.next(playerList);
+              }
+              this.clientService.respondTeleportRequest(requesterId, true);
+            },
+            () => {
+              if (player && playerList) {
+                player.hasTeleportRequest = false;
+                this.playerList.next(playerList);
+              }
+              this.clientService.respondTeleportRequest(requesterId, false);
+            },
+          );
+        },
+      );
+  }
+
+  private onTeleportRequestHandled() {
+    this.teleportRequestHandledSubscription =
+      this.clientService.teleportRequestHandledChange.subscribe(
+        ({ requesterId }) => {
+          const playerList = this.playerList.getValue();
+          if (!playerList) {
+            return;
+          }
+
+          const player = playerList.players.find(
+            existing => existing.id === requesterId,
+          );
+          if (player) {
+            player.hasTeleportRequest = false;
+            this.playerList.next(playerList);
+          }
+        },
+      );
+  }
+
+  private onAvatarChange() {
+    this.avatarSubscription = this.clientService.avatarChange.subscribe(
+      (player: Player) => {
+        const playerList = this.playerList.getValue();
+        if (!playerList) {
+          return;
+        }
+
+        let existing = playerList.players.find(entry => entry.id === player.id);
+
+        if (!existing && player.id === this.clientService.localPlayerId) {
+          this.ensureLocalPlayerEntry();
+          existing = playerList.players.find(entry => entry.id === player.id);
+        }
+
+        if (!existing) {
+          return;
+        }
+
+        existing.avatar = player.avatar;
+        this.playerList.next(playerList);
+      },
+    );
+  }
+
+  private onActorNameChange() {
+    this.actorNameSubscription = this.clientService.actorNameChange.subscribe(
+      (player: Player) => {
+        const playerList = this.playerList.getValue();
+        if (!playerList) {
+          return;
+        }
+
+        const existing = playerList.players.find(
+          entry => entry.id === player.id,
+        );
+
+        if (!existing) {
+          return;
+        }
+
+        existing.actorName = player.actorName;
+        this.updateDisplayName(existing);
+        this.playerList.next(playerList);
+      },
+    );
+  }
+
+  private onLocalPlayerMetadata() {
+    this.nameSubscription = this.clientService.nameChange.subscribe(() => {
+      this.ensureLocalPlayerEntry();
+    });
+
+    this.localPlayerSubscription =
+      this.clientService.localPlayerIdChange.subscribe(() => {
+        this.ensureLocalPlayerEntry();
+      });
+  }
+
+  private ensureLocalPlayerEntry() {
+    const localId = this.clientService.localPlayerId;
+    if (localId === undefined || localId === null) {
+      return;
+    }
+
+    const playerList = this.playerList.getValue() ?? this.getPlayerList();
+    if (!playerList) {
+      return;
+    }
+
+    const displayName = this.clientService.nameChange.getValue();
+    let existing = playerList.players.find(player => player.id === localId);
+
+    if (!existing) {
+      existing = new Player({
+        id: localId,
+        name: displayName && displayName.length > 0 ? displayName : 'You',
+        connected: true,
+        online: true,
+        cellName: '',
+        isLoaded: true,
+        avatar: this.defaultAvatar,
+      });
+      this.updateDisplayName(existing);
+      playerList.players.push(existing);
+    } else {
+      if (displayName && displayName.length > 0) {
+        existing.name = displayName;
+      }
+      if (!existing.avatar) {
+        existing.avatar = this.defaultAvatar;
+      }
+      this.updateDisplayName(existing);
+    }
+
+    existing.connected = true;
+    existing.online = true;
+    existing.isLoaded = true;
+
+    this.playerList.next(playerList);
+  }
+
+  private onNamePreferenceChange() {
+    this.namePreferenceSubscription =
+      this.settingService.settings.playerNamePreference.subscribe(() => {
+        const playerList = this.getPlayerList();
+        if (!playerList) {
+          return;
+        }
+        for (const player of playerList.players) {
+          this.updateDisplayName(player);
+        }
+        this.playerList.next(playerList);
+      });
+  }
+
+  private updateDisplayName(player: Player) {
+    player.displayName = this.settingService.resolvePlayerName(player);
+  }
+
+  private resolveDisplayName(player?: Player, fallback?: string): string {
+    if (player) {
+      this.updateDisplayName(player);
+      return player.displayName || player.name || fallback || '';
+    }
+
+    return fallback || '';
   }
 
   public getLocalPlayer(): Player {

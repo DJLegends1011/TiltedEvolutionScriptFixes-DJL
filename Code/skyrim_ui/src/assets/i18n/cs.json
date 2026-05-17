@@ -62,6 +62,20 @@
       },
       "LEAVE_PARTY": "Opustit skupinu"
     },
+    "PARTY_OPTIONS": {
+      "TITLE": "Party options",
+      "LEADER": "Leader",
+      "SYNC_FAST_TRAVEL_MARKERS": "Sync fast travel markers",
+      "SHOW_PARTY_MEMBER_MARKERS": "Party member markers",
+      "SYNC_FAST_TRAVEL_MARKERS_TOOLTIP": "Shares discovered fast travel markers with your party.",
+      "SHOW_PARTY_MEMBER_MARKERS_TOOLTIP": "Shows party member markers on your world map.",
+      "LOCK_PARTY_TO_LEADER_CELL": "Lock party to leader cell",
+      "LOCK_PARTY_TO_LEADER_CELL_TOOLTIP": "Prevents non-leaders from changing cells. Party members follow the leader when they move.",
+      "EXPERIMENTAL": "Experimental (not recommended)",
+      "SYNC_DEAD_BODY_LOOT": "Sync dead body loot",
+      "SYNC_DEAD_BODY_LOOT_TOOLTIP": "When disabled, party members can loot corpses independently. Experimental and not recommended.",
+      "LEADER_ONLY": "Only the party leader can change these."
+    },
     "PARTY_LIST": {
       "NO_OTHER_PLAYERS": "Nikdo tu není",
       "TABLE_HEADERS": {
@@ -124,6 +138,23 @@
       },
       "PARTY_ANCHOR_OFFSET_X": "Horizontální odsazení",
       "PARTY_ANCHOR_OFFSET_Y": "Vertikální odsazení",
+      "PARTY_SCALE": "Party Scale",
+      "PARTY_LAYOUT": "Layout",
+      "PARTY_LAYOUTS": {
+        "CLASSIC": "Classic",
+        "COMPACT": "Compact"
+      },
+      "PARTY_SHOW_AVATAR": "Show Avatars",
+      "PARTY_SHOW_NAME": "Show Names",
+      "PARTY_NAME_SOURCE": "Name Source",
+      "PARTY_NAME_SOURCES": {
+        "USERNAME": "Username",
+        "ACTOR": "Actor name (if available)"
+      },
+      "PARTY_SHOW_LEVEL": "Show Level",
+      "PARTY_SHOW_HEALTH": "Show Health Bar",
+      "PARTY_PIN_SHOW_AVATAR": "Show Marker Avatars",
+      "PARTY_PIN_SCALE": "Marker Size",
       "LENGTH": "{{length}}s",
       "UI": "UI",
       "LANGUAGE": "Jazyk",
@@ -136,6 +167,18 @@
         "M": "Střední",
         "L": "Velké",
         "XL": "Velmi Velké"
+      },
+      "NAMETAG_MODE": "Nametag Style",
+      "NAMETAG_MODES": {
+        "NORMAL": "Classic (avatar + level stacked)",
+        "DETAILED": "Compact (avatar + level)",
+        "BASIC": "Name only",
+        "HIDDEN": "Hidden"
+      },
+      "PLAYER_NAME_PREFERENCE": "Player Name Preference",
+      "PLAYER_NAME_PREFERENCES": {
+        "USERNAME": "Username",
+        "ACTOR": "Actor name (if available)"
       },
       "BACK": "Zpět"
     }

@@ -1,6 +1,8 @@
 import { Injectable } from '@angular/core';
 import { TranslocoService } from '@ngneat/transloco';
 import { BehaviorSubject } from 'rxjs';
+import { environment } from '../../environments/environment';
+import { NametagMode } from '../models/nametag-mode.enum';
 import { StoreService } from './store.service';
 
 export enum FontSize {
@@ -16,6 +18,16 @@ export enum PartyAnchor {
   TOP_RIGHT,
   BOTTOM_RIGHT,
   BOTTOM_LEFT,
+}
+
+export enum PartyLayout {
+  CLASSIC = 'classic',
+  COMPACT = 'compact',
+}
+
+export enum PlayerNamePreference {
+  USERNAME = 'username',
+  ACTOR = 'actor',
 }
 
 export const autoHideTimerLengths = [1, 3, 5];
@@ -100,7 +112,16 @@ export class SettingService {
   private readonly partyAnchorValues = Object.values(
     PartyAnchor,
   ) as PartyAnchor[];
+  private readonly partyLayoutValues = Object.values(PartyLayout);
+  private readonly playerNamePreferenceValues =
+    Object.values(PlayerNamePreference);
   private readonly autoHideTimeValues = autoHideTimerLengths;
+  private readonly nametagModeValues: NametagMode[] = [
+    NametagMode.Detailed,
+    NametagMode.Basic,
+    NametagMode.Hidden,
+    NametagMode.Normal,
+  ];
 
   public settings = {
     volume: new SliderSetting(this.storeService, 'audio_volume', 0.5),
@@ -116,6 +137,18 @@ export class SettingService {
       'font_size',
       this.fontSizeValues,
       FontSize.M,
+    ),
+    nametagMode: new SelectSetting(
+      this.storeService,
+      'nametag_mode',
+      this.nametagModeValues,
+      NametagMode.Normal,
+    ),
+    playerNamePreference: new SelectSetting(
+      this.storeService,
+      'player_name_preference',
+      this.playerNamePreferenceValues,
+      PlayerNamePreference.USERNAME,
     ),
     isPartyShown: new ToggleSetting(this.storeService, 'party_isShown', true),
     autoHideParty: new ToggleSetting(
@@ -145,6 +178,39 @@ export class SettingService {
       'party_anchor_offset_y',
       3,
     ),
+    partyScale: new SliderSetting(this.storeService, 'party_scale', 1),
+    partyLayout: new SelectSetting(
+      this.storeService,
+      'party_layout',
+      this.partyLayoutValues,
+      PartyLayout.CLASSIC,
+    ),
+    partyShowAvatar: new ToggleSetting(
+      this.storeService,
+      'party_show_avatar',
+      true,
+    ),
+    partyShowName: new ToggleSetting(
+      this.storeService,
+      'party_show_name',
+      true,
+    ),
+    partyShowLevel: new ToggleSetting(
+      this.storeService,
+      'party_show_level',
+      true,
+    ),
+    partyShowHealth: new ToggleSetting(
+      this.storeService,
+      'party_show_health',
+      true,
+    ),
+    partyPinShowAvatar: new ToggleSetting(
+      this.storeService,
+      'party_pin_show_avatar',
+      true,
+    ),
+    partyPinScale: new SliderSetting(this.storeService, 'party_pin_scale', 1),
     isDebugShown: new ToggleSetting(this.storeService, 'debug_isShown', false),
   };
 
@@ -155,5 +221,55 @@ export class SettingService {
     this.settings.language.subscribe(lang =>
       translocoService.setActiveLang(lang),
     );
+    this.settings.nametagMode.subscribe(mode => this.pushNametagMode(mode));
+    this.settings.playerNamePreference.subscribe(pref =>
+      this.pushPlayerNamePreference(pref),
+    );
+  }
+
+  private pushNametagMode(mode: NametagMode): void {
+    if (!environment.game) {
+      return;
+    }
+
+    const api = (globalThis as any).skyrimtogether;
+    if (api && typeof api.setNameTagMode === 'function') {
+      api.setNameTagMode(mode);
+    }
+  }
+
+  private pushPlayerNamePreference(pref: PlayerNamePreference): void {
+    if (!environment.game) {
+      return;
+    }
+
+    const api = (globalThis as any).skyrimtogether;
+    if (api && typeof api.setPlayerNamePreference === 'function') {
+      api.setPlayerNamePreference(pref);
+    }
+  }
+
+  public resolvePlayerName(
+    player?: { name?: string; actorName?: string },
+    fallback = '',
+  ): string {
+    const preference = this.settings.playerNamePreference.getValue();
+    if (
+      preference === PlayerNamePreference.ACTOR &&
+      player?.actorName &&
+      player.actorName.length > 0
+    ) {
+      return player.actorName;
+    }
+
+    if (player?.name && player.name.length > 0) {
+      return player.name;
+    }
+
+    if (player?.actorName && player.actorName.length > 0) {
+      return player.actorName;
+    }
+
+    return fallback;
   }
 }

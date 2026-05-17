@@ -9,7 +9,12 @@ import {
   timer,
 } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { PartyAnchor, SettingService } from 'src/app/services/setting.service';
+import {
+  PartyAnchor,
+  PartyLayout,
+  PlayerNamePreference,
+  SettingService,
+} from 'src/app/services/setting.service';
 import { fadeInOutActiveAnimation } from '../../animations/fade-in-out-active.animation';
 import { Group } from '../../models/group';
 import { Player } from '../../models/player';
@@ -22,6 +27,8 @@ interface GroupPosition {
   right?: string;
   bottom?: string;
   left?: string;
+  transform?: string;
+  transformOrigin?: string;
 }
 
 @Component({
@@ -34,8 +41,11 @@ interface GroupPosition {
 export class GroupComponent implements OnInit, OnDestroy {
   timerSubscription: Subscription;
 
-  groupMembers$: Observable<(Player & { isOwner: boolean })[]>;
+  groupMembers$: Observable<
+    (Player & { isOwner: boolean; isLocal: boolean })[]
+  >;
   group$: Observable<Group>;
+  readonly defaultAvatar = 'assets/images/group/avatar-placeholder.png';
 
   public isAutoHide = new BehaviorSubject(true);
   public isShown = new BehaviorSubject(true);
@@ -45,6 +55,7 @@ export class GroupComponent implements OnInit, OnDestroy {
     left: '0%',
   });
   public settings = this.settingService.settings;
+  public partyLayout = PartyLayout;
 
   constructor(
     private readonly destroy$: DestroyService,
@@ -57,13 +68,29 @@ export class GroupComponent implements OnInit, OnDestroy {
 
     this.group$ = this.groupService.group.asObservable();
     this.groupMembers$ = this.groupService.selectMembers().pipe(
-      combineLatestWith(this.groupService.group),
-      map(([members, group]) => {
+      combineLatestWith(
+        this.groupService.group,
+        this.settings.playerNamePreference,
+      ),
+      map(([members, group, namePreference]) => {
         if (!group) {
           return [];
         }
+        const localId = this.clientService.localPlayerId;
         return members
-          .map(member => ({ ...member, isOwner: member.id === group.owner }))
+          .map(member => ({
+            ...member,
+            isOwner: member.id === group.owner,
+            isLocal: member.id === localId,
+            name:
+              namePreference === PlayerNamePreference.ACTOR && member.actorName
+                ? member.actorName
+                : member.name,
+            avatar:
+              member.avatar && member.avatar.length > 0
+                ? member.avatar
+                : this.defaultAvatar,
+          }))
           .sort((a, b) =>
             (group.owner === a.id) === (group.owner === b.id)
               ? 0
@@ -153,29 +180,36 @@ export class GroupComponent implements OnInit, OnDestroy {
       this.settings.partyAnchorOffsetX,
       this.settings.partyAnchorOffsetY,
       this.settings.partyAnchor,
+      this.settings.partyScale,
     ])
       .pipe(takeUntil(this.destroy$))
-      .subscribe(([x, y, anchor]) => {
+      .subscribe(([x, y, anchor, scale]) => {
         const newPosition: GroupPosition = {};
+        const resolvedScale = Math.max(0.5, Math.min(2, scale));
 
         switch (anchor) {
           case PartyAnchor.TOP_LEFT:
             newPosition.top = `${y}vh`;
             newPosition.left = `${x}vw`;
+            newPosition.transformOrigin = 'top left';
             break;
           case PartyAnchor.TOP_RIGHT:
             newPosition.top = `${y}vh`;
             newPosition.right = `${-100 + x}vw`;
+            newPosition.transformOrigin = 'top right';
             break;
           case PartyAnchor.BOTTOM_RIGHT:
             newPosition.bottom = `${-100 + y}vh`;
             newPosition.right = `${-100 + x}vw`;
+            newPosition.transformOrigin = 'bottom right';
             break;
           case PartyAnchor.BOTTOM_LEFT:
             newPosition.bottom = `${-100 + y}vh`;
             newPosition.left = `${x}vw`;
+            newPosition.transformOrigin = 'bottom left';
             break;
         }
+        newPosition.transform = `scale(${resolvedScale})`;
         this.positionStyle.next(newPosition);
       });
   }
