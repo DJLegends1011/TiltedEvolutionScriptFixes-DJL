@@ -118,12 +118,12 @@ NiPoint3 PlayerCharacter::RespawnPlayer() noexcept
     if (pCellEditorId && std::strcmp(pCellEditorId, "Saarthal02") == 0)
     {
         // TODO: Test this known entrance respawn position
-        pos = {786.f, -286.f, 8.f};
+        pos = glm::vec3(786.f, -286.f, 8.f);
     }
     else if (pCellEditorId && std::strcmp(pCellEditorId, "QASmoke") == 0)
     {
         // TODO: Test qasmoke respawn ca 1 meter above COC
-        pos = {363.f, 2035.f, 7152.f};
+        pos = glm::vec3(363.f, 2035.f, 7152.f);
     }
     else
     {
