@@ -1,6 +1,8 @@
 #include <PlayerCharacter.h>
 #include <Games/ActorExtension.h>
 
+#include <cstring>
+
 #include <Structs/Skyrim/AnimationGraphDescriptor_Master_Behavior.h>
 #include <Structs/Skyrim/AnimationGraphDescriptor_VampireLordBehavior.h>
 
@@ -91,7 +93,6 @@ NiPoint3 PlayerCharacter::RespawnPlayer() noexcept
     SetNoBleedoutRecovery(false);
 
     DispelAllSpells();
-
     // Reset health to max
     // TODO(cosideci): there's a cleaner way to do this
     ForceActorValue(ActorValueOwner::ForceMode::DAMAGE, ActorValueInfo::kHealth, 1000000);
@@ -112,7 +113,23 @@ NiPoint3 PlayerCharacter::RespawnPlayer() noexcept
 
     NiPoint3 pos{};
     NiPoint3 rot{};
-    pCell->GetCOCPlacementInfo(&pos, &rot, true);
+
+    const char* pCellEditorId = pCell->GetFormEditorID();
+    if (pCellEditorId && std::strcmp(pCellEditorId, "Saarthal02") == 0)
+    {
+        // TODO: Test this known entrance respawn position
+        pos = {786.f, -286.f, 8.f};
+    }
+    else if (pCellEditorId && std::strcmp(pCellEditorId, "QASmoke") == 0)
+    {
+        // TODO: Test qasmoke respawn ca 1 meter above COC
+        pos = {363.f, 2035.f, 7152.f};
+    }
+    else
+    {
+        // Default behavior: spawn at center of cell
+        pCell->GetCOCPlacementInfo(&pos, &rot, true);
+    }
 
     MoveTo(pCell, pos);
 
