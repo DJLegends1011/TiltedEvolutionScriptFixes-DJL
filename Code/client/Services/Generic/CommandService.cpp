@@ -10,6 +10,7 @@
 #include <PlayerCharacter.h>
 
 #include "Messages/SetTimeCommandRequest.h"
+#include "Messages/WaitTimeCommandRequest.h"
 #include <Events/SetTimeCommandEvent.h>
 #include <Events/WaitTimeCommandEvent.h>
 
@@ -28,6 +29,15 @@ void CommandService::OnSetTimeCommand(const SetTimeCommandEvent& acEvent) const 
     SetTimeCommandRequest request{};
     request.Hours = acEvent.Hours;
     request.Minutes = acEvent.Minutes;
+    request.PlayerId = acEvent.PlayerId;
+    m_transport.Send(request);
+}
+
+void CommandService::OnWaitTimeCommand(const WaitTimeCommandEvent& acEvent) const noexcept
+{
+    WaitTimeCommandRequest request{};
+    request.Hours = acEvent.Hours;
+    request.Minutes = 0;
     request.PlayerId = acEvent.PlayerId;
     m_transport.Send(request);
 }

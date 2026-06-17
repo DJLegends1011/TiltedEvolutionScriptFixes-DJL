@@ -8,8 +8,10 @@
 
 #include <Messages/SendChatMessageRequest.h>
 #include <Messages/TeleportRequest.h>
-
+#include "Messages/SetTimeCommandRequest.h"
+#include "Messages/WaitTimeCommandRequest.h"
 #include <Events/SetTimeCommandEvent.h>
+#include <Events/WaitTimeCommandEvent.h>
 
 #include <World.h>
 
@@ -51,6 +53,8 @@ bool OverlayClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
             ProcessChatMessage(eventArgs);
         else if (eventName == "setTime")
             ProcessSetTimeCommand(eventArgs);
+        else if (eventName == "waitTime")
+            ProcessWaitTimeCommand(eventArgs);
         else if (eventName == "launchParty")
             World::Get().GetPartyService().CreateParty();
         else if (eventName == "leaveParty")
@@ -135,6 +139,14 @@ void OverlayClient::ProcessSetTimeCommand(CefRefPtr<CefListValue> aEventArgs)
     const uint8_t minutes = static_cast<uint8_t>(aEventArgs->GetInt(1));
     const uint32_t senderId = m_transport.GetLocalPlayerId();
     World::Get().GetDispatcher().trigger(SetTimeCommandEvent(hours, minutes, senderId));
+}
+
+void OverlayClient::ProcessWaitTimeCommand(CefRefPtr<CefListValue> aEventArgs)
+{
+    const uint8_t hours = static_cast<uint8_t>(aEventArgs->GetInt(0));
+    const uint8_t minutes = 0;
+    const uint32_t senderId = m_transport.GetLocalPlayerId();
+    World::Get().GetDispatcher().trigger(WaitTimeCommandEvent(hours, minutes, senderId));
 }
 
 void OverlayClient::ProcessTeleportMessage(CefRefPtr<CefListValue> aEventArgs)
