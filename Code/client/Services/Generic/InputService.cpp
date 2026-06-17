@@ -2,6 +2,7 @@
 
 #include <Services/InputService.h>
 #include <Services/OverlayService.h>
+#include <Services/PartyService.h>
 
 #include <OverlayApp.hpp>
 
@@ -200,6 +201,29 @@ void ProcessKeyboard(uint16_t aKey, uint16_t aScanCode, cef_key_event_type_t aTy
         else if (aType == KEYEVENT_KEYUP)
         {
             SetUIActive(overlay, pRenderer, !active);
+        }
+    }
+    else if (aKey == 'T' && aType == KEYEVENT_KEYDOWN && !active)
+    {
+        if (MenuControls::GetInstance()->IsMenuModeEnabled() || MenuControls::GetInstance()->IsConsoleModeEnabled())
+            return;
+
+        if (!pApp->IsCefQuickPopupVisible())
+        {
+            const bool isLeader = World::Get().GetPartyService().IsLeader();
+
+            pApp->InjectKey(KEYEVENT_KEYDOWN, EVENTFLAG_NONE, VK_RETURN, 0);
+            pApp->InjectKey(KEYEVENT_CHAR, EVENTFLAG_NONE, '/', 0);
+
+            if (isLeader)
+            {
+                CefRefPtr<CefListValue> args = CefListValue::Create();
+                args->SetString(0, "wait");
+                args->SetString(1, " ");
+                pApp->InjectKeyEventWithArgs("keyEvent", args);
+            }
+
+            pApp->InjectKey(KEYEVENT_KEYUP, EVENTFLAG_NONE, VK_RETURN, 0);
         }
     }
     else if (active)

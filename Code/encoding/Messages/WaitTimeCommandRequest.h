@@ -6,7 +6,10 @@ struct WaitTimeCommandRequest final : ClientMessage
 {
     static constexpr ClientOpcode Opcode = kWaitTimeCommandRequest;
 
-    WaitTimeCommandRequest() = default;
+    WaitTimeCommandRequest()
+        : ClientMessage(kWaitTimeCommandRequest)
+    {
+    }
     WaitTimeCommandRequest(uint32_t aHours, uint32_t aMinutes, uint32_t aPlayerId)
         : ClientMessage(kWaitTimeCommandRequest)
         , Hours(aHours)
