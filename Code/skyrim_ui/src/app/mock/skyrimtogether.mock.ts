@@ -113,6 +113,10 @@ export class SkyrimtogetherMock extends EventEmitter implements SkyrimTogether {
     this.sendMessage(MessageTypes.SYSTEM_MESSAGE, `Setting time to "${hours}:${minutes}"!`);
   }
 
+  waitTime(hours: number): void {
+    this.sendMessage(MessageTypes.SYSTEM_MESSAGE, `Waiting ${hours} hour(s)!`);
+  }
+
   sendMessage(type: MessageTypes, message: string): void {
     if (this.connected) {
       this.emit('message', type, message, this.playerName);

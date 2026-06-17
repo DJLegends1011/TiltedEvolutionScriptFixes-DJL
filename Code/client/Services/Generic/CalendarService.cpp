@@ -9,7 +9,7 @@
 #include <PlayerCharacter.h>
 #include <TimeManager.h>
 #include <Games/Events.h>
-#include <Games/EventDispatcher.h>
+#include <Events/EventDispatcher.h>
 
 constexpr float kTransitionSpeed = 5.f;
 

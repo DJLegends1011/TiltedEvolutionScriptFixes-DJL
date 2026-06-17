@@ -119,11 +119,13 @@ interface SkyrimTogether {
   /** Add listener to when the player exits a game. */
   on(event: 'exitGame', callback: SkyrimTogetherTypes.ExitGameCallback): void;
 
-  /** Add listener to when the player open/close a game menu. */
-  on(
-    event: 'openingMenu',
-    callback: SkyrimTogetherTypes.OpeningMenuCallback,
-  ): void;
+  /** Add listener to when the player press T to open wait menu. */
+  waitTime(hours: number, minutes: number): void;
+
+  /**
+   * Return the time by 1 hour relitive to current time
+   */
+  waitTime(hours: number): void;
 
   /** Add listener to when a player message is received. */
   on(event: 'message', callback: SkyrimTogetherTypes.MessageCallback): void;

@@ -43,6 +43,31 @@ export class CommandHandler {
     },
   }
 
+  private Wait: Command = {
+    name: 'wait', 
+    executor: async (args) => {
+      const cmds = [...this.commands.keys()].join(', ');
+      if (args.length != 1) {
+        this.chatService.pushSystemMessage(
+          'COMPONENT.CHAT.WAIT_ARGUMENT_COUNT', 
+          { cmds },
+        );
+        return;
+      }
+      const hours = parseInt(args[0]);
+      if (hours < 1 || hours > 23 || Number.isNaN(hours)) {
+        this.chatService.pushSystemMessage(
+          'COMPONENT.CHAT.WAIT_INVALID_ARGUMENTS',
+          { cmds },
+        );
+        return;
+      }
+      skyrimtogether.waitTime(hours);
+      // TODO (Toe Knee): Ideally send a localizable response string here,
+      // currently relies on user making it themselves with serverside scripting
+    },
+  }
+
   private readonly commands = new Map<string, Command>();
 
   public constructor(private readonly chatService: ChatService) {

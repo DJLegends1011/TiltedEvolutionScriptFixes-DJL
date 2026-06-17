@@ -8,11 +8,16 @@
 #include <Messages/NotifySetTimeResult.h>
 #include <Messages/TeleportCommandRequest.h>
 #include <Messages/TeleportCommandResponse.h>
+#include <Messages/WaitTimeCommandRequest.h>
+#include <Messages/NotifyWaitTimeResult.h>
+
+#include <PartyService.h>
 
 CommandService::CommandService(World& aWorld, entt::dispatcher& aDispatcher) noexcept
     : m_world(aWorld)
 {
     m_setTimeConnection = aDispatcher.sink<PacketEvent<SetTimeCommandRequest>>().connect<&CommandService::OnSetTimeCommand>(this);
+    m_waitTimeConnection = aDispatcher.sink<PacketEvent<WaitTimeCommandRequest>>().connect<&CommandService::OnWaitTimeCommand>(this);
     m_teleportConnection = aDispatcher.sink<PacketEvent<TeleportCommandRequest>>().connect<&CommandService::OnTeleportCommandRequest>(this);
 }
 
@@ -40,6 +45,28 @@ void CommandService::OnSetTimeCommand(const PacketEvent<SetTimeCommandRequest>& 
     }
 
     response.Result = NotifySetTimeResult::SetTimeResult::kNoPermission;
+    acMessage.pPlayer->Send(response);
+}
+
+void CommandService::OnWaitTimeCommand(const PacketEvent<WaitTimeCommandRequest>& acMessage) const noexcept
+{
+    NotifyWaitTimeResult response{};
+
+    const auto cPlayerId = static_cast<uint32_t>(acMessage.Packet.PlayerId);
+    const auto cHours = static_cast<int>(acMessage.Packet.Hours);
+
+    const auto* pPartyService = static_cast<PartyService*>(&m_world.GetPartyService());
+    if (pPartyService->GetOldestLeaderId() == cPlayerId)
+    {
+        m_world.GetCalendarService().SetTime(cHours, 0, m_world.GetCalendarService().GetTimeScale());
+
+        response.Result = NotifyWaitTimeResult::WaitTimeResult::kSuccess;
+        acMessage.pPlayer->Send(response);
+
+        return;
+    }
+
+    response.Result = NotifyWaitTimeResult::WaitTimeResult::kNotOldestLeader;
     acMessage.pPlayer->Send(response);
 }
 

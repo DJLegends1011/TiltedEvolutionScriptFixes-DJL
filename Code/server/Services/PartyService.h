@@ -54,6 +54,9 @@ protected:
 private:
     World& m_world;
 
+    uint32_t GetOldestLeaderId() const noexcept;
+    uint32_t GetPartyLeaderId(uint32_t aPlayerId) const noexcept;
+
     TiltedPhoques::Map<uint32_t, Party> m_parties;
     uint32_t m_nextId{0};
     uint64_t m_nextInvitationExpire{0};

@@ -21,6 +21,7 @@ public:
 
 protected:
     void OnSetTimeCommand(const SetTimeCommandEvent&) const noexcept;
+    void OnWaitTimeCommand(const WaitTimeCommandEvent&) const noexcept;
     /**
      * @brief Processes result of teleport command.
      */

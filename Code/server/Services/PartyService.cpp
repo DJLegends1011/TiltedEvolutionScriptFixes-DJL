@@ -117,6 +117,7 @@ void PartyService::OnPartyCreate(const PacketEvent<PartyCreateRequest>& acPacket
         Party& party = m_parties[partyId];
         party.Members.push_back(player);
         party.LeaderPlayerId = player->GetId();
+        party.CreateTick = GameServer::Get()->GetTick();
         inviterPartyComponent.JoinedPartyId = partyId;
 
         spdlog::debug("[PartyService]: Created party for {}", player->GetId());

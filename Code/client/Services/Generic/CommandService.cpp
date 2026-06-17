@@ -9,11 +9,9 @@
 #include <Forms/TESWorldSpace.h>
 #include <PlayerCharacter.h>
 
-#include <Events/SetTimeCommandEvent.h>
-
-#include <Messages/TeleportCommandRequest.h>
-#include <Messages/TeleportCommandResponse.h>
 #include "Messages/SetTimeCommandRequest.h"
+#include <Events/SetTimeCommandEvent.h>
+#include <Events/WaitTimeCommandEvent.h>
 
 #include <Structs/GridCellCoords.h>
 
