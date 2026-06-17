@@ -8,6 +8,8 @@
 #include <Forms/TESObjectCELL.h>
 #include <PlayerCharacter.h>
 #include <TimeManager.h>
+#include <Games/Events.h>
+#include <Games/EventDispatcher.h>
 
 constexpr float kTransitionSpeed = 5.f;
 
@@ -24,10 +26,17 @@ CalendarService::CalendarService(World& aWorld, entt::dispatcher& aDispatcher, T
     m_timeUpdateConnection = aDispatcher.sink<ServerTimeSettings>().connect<&CalendarService::OnTimeUpdate>(this);
     m_updateConnection = aDispatcher.sink<UpdateEvent>().connect<&CalendarService::HandleUpdate>(this);
     m_disconnectedConnection = aDispatcher.sink<DisconnectedEvent>().connect<&CalendarService::OnDisconnected>(this);
+
+    auto* pDispatcher = EventDispatcherManager::Get();
+    pDispatcher->unknownDispatcher39.RegisterSink(this); // TESSleepStartEvent
+    pDispatcher->sleepStopEvent.RegisterSink(this);
 }
 
 void CalendarService::OnTimeUpdate(const ServerTimeSettings& acMessage) noexcept
 {
+    if (m_ignoreServerTime)
+        return;
+
     // disable the game clock
     ToggleGameClock(false);
     m_onlineTime.m_timeModel.TimeScale = acMessage.timeModel.TimeScale;
@@ -81,8 +90,32 @@ void CalendarService::ToggleGameClock(bool aEnable)
     s_gameClockLocked = !aEnable;
 }
 
+BSTEventResult CalendarService::OnEvent(const TESSleepStartEvent*, const EventDispatcher<TESSleepStartEvent>*) noexcept
+{
+    m_ignoreServerTime = true;
+    ToggleGameClock(true);
+    return BSTEventResult::kOk;
+}
+
+BSTEventResult CalendarService::OnEvent(const TESSleepStopEvent*, const EventDispatcher<TESSleepStopEvent>*) noexcept
+{
+    m_serverResumeTime = m_world.GetTick() + 2.f;
+    return BSTEventResult::kOk;
+}
+
 void CalendarService::HandleUpdate(const UpdateEvent& aEvent) noexcept
 {
+    if (m_ignoreServerTime && m_serverResumeTime.has_value())
+    {
+        const float now = m_world.GetTick();
+        if (now >= *m_serverResumeTime)
+        {
+            m_serverResumeTime.reset();
+            m_ignoreServerTime = false;
+            ToggleGameClock(false);
+        }
+    }
+
     if (s_gameClockLocked)
     {
         const auto updateDelta = static_cast<float>(aEvent.Delta);

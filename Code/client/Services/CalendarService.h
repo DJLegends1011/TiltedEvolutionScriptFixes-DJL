@@ -3,6 +3,7 @@
 #include <DateTime.h>
 #include <Events/EventDispatcher.h>
 #include <Games/Events.h>
+#include <optional>
 
 struct ServerTimeSettings;
 struct DisconnectedEvent;
@@ -25,6 +26,9 @@ private:
     void HandleUpdate(const UpdateEvent&) noexcept;
     void OnDisconnected(const DisconnectedEvent&) noexcept;
 
+    BSTEventResult OnEvent(const TESSleepStartEvent*, const EventDispatcher<TESSleepStartEvent>*) noexcept;
+    BSTEventResult OnEvent(const TESSleepStopEvent*, const EventDispatcher<TESSleepStopEvent>*) noexcept;
+
     void ToggleGameClock(bool aEnable);
     float TimeInterpolate(const TimeModel& aFrom, TimeModel& aTo) const;
 
@@ -35,6 +39,8 @@ private:
     DateTime m_onlineTime;
     DateTime m_offlineTime;
     float m_fadeTimer = 0.f;
+    bool m_ignoreServerTime = false;
+    std::optional<float> m_serverResumeTime{};
     static bool s_gameClockLocked;
 
     uint64_t m_lastTick = 0;
