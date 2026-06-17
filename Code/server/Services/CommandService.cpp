@@ -11,7 +11,7 @@
 #include <Messages/WaitTimeCommandRequest.h>
 #include <Messages/NotifyWaitTimeResult.h>
 
-#include <PartyService.h>
+#include <Services/PartyService.h>
 
 CommandService::CommandService(World& aWorld, entt::dispatcher& aDispatcher) noexcept
     : m_world(aWorld)
