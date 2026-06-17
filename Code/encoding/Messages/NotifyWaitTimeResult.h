@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Message.h"
+#include "../Opcodes.h"
 
 struct NotifyWaitTimeResult final : ServerMessage
 {

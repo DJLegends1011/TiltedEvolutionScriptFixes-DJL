@@ -11,5 +11,5 @@ void NotifyWaitTimeResult::DeserializeRaw(TiltedPhoques::Buffer::Reader& aReader
 
     uint64_t dest = 0;
     aReader.ReadBits(dest, 8);
-    Result = static_cast<SetTimeResult>(dest & 0xFF);
+    Result = static_cast<WaitTimeResult>(dest & 0xFF);
 }
