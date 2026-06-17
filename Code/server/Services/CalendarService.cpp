@@ -87,7 +87,7 @@ bool CalendarService::SetDate(int aDay, int aMonth, float aYear) noexcept
     if (aMonth >= 0 && aMonth < 12 && aYear >= 0 && aYear <= 999)
     {
         auto maxDays = m_dateTime.GetNumberOfDaysByMonthIndex(aMonth);
-        if (aDay >= 0 && aDay < static_cast<int>(maxDays))
+        if (static_cast<unsigned int>(aDay) < maxDays)
         {
             m_dateTime.m_timeModel.Day = aDay;
             m_dateTime.m_timeModel.Month = aMonth;
