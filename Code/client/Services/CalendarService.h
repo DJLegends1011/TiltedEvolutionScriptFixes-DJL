@@ -14,7 +14,9 @@ struct TransportService;
 /**
  * @brief Handles time sync.
  */
-class CalendarService final : public BSTEventSink<TESActivateEvent>
+class CalendarService final : public BSTEventSink<TESActivateEvent>,
+                              public BSTEventSink<TESSleepStartEvent>,
+                              public BSTEventSink<TESSleepStopEvent>
 {
 public:
     CalendarService(World&, entt::dispatcher&, TransportService&);
