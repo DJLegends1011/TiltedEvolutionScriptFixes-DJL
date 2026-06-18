@@ -24,6 +24,7 @@ struct PartyService
         uint32_t LeaderPlayerId;
         Vector<Player*> Members;
         GameId CachedWeather{};
+        float CreateTick{};
     };
 
     PartyService(World& aWorld, entt::dispatcher& aDispatcher) noexcept;
