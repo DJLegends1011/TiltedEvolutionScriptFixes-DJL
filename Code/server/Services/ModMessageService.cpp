@@ -6,6 +6,7 @@
 #include <Messages/SendModMessageRequest.h>
 
 #include <Game/Player.h>
+#include <World.h>
 
 ModMessageService::ModMessageService(World& aWorld, entt::dispatcher& aDispatcher) noexcept
     : m_world(aWorld)
@@ -26,14 +27,21 @@ void ModMessageService::OnSendModMessage(const PacketEvent<SendModMessageRequest
     if (!cParty.JoinedPartyId.has_value())
         return;
 
-    // Sending to a single party member is not supported yet
-    if (cRequest.TargetPlayerId != 0)
-        return;
-
     NotifyModMessage notify{};
     notify.Channel = cRequest.Channel;
     notify.SenderPlayerId = acMessage.pPlayer->GetId();
     notify.Data = cRequest.Data;
 
-    GameServer::Get()->SendToParty(notify, cParty, acMessage.GetSender());
+    if (cRequest.TargetPlayerId == 0)
+    {
+        GameServer::Get()->SendToParty(notify, cParty, acMessage.GetSender());
+        return;
+    }
+
+    // The target must be in the sender's own party, whatever the client claims
+    const Player* pTarget = m_world.GetPlayerManager().GetById(cRequest.TargetPlayerId);
+    if (!pTarget || pTarget == acMessage.pPlayer || pTarget->GetParty().JoinedPartyId != cParty.JoinedPartyId)
+        return;
+
+    pTarget->Send(notify);
 }

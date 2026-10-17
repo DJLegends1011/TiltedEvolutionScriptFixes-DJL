@@ -40,8 +40,11 @@ SendResult PluginService::Send(ChannelHandle aChannel, const char* apBytes, size
 
 SendResult PluginService::SendTo(ChannelHandle aChannel, uint32_t aPlayerId, const char* apBytes, size_t aLength) noexcept
 {
-    // Not supported yet
-    return SendResult::NotInParty;
+    // 0 means the whole party, so it is not a valid target
+    if (aPlayerId == 0)
+        return SendResult::NotInParty;
+
+    return Queue(aChannel, aPlayerId, apBytes, aLength);
 }
 
 uint32_t PluginService::GetLocalPlayerId() const noexcept
@@ -75,8 +78,16 @@ SendResult PluginService::Queue(ChannelHandle aChannel, uint32_t aTargetPlayerId
     if (!entt::locator<World>::has_value() || !World::Get().GetTransport().IsOnline())
         return SendResult::NotConnected;
 
-    if (!World::Get().GetPartyService().IsInParty())
+    const auto& cPartyService = World::Get().GetPartyService();
+    if (!cPartyService.IsInParty())
         return SendResult::NotInParty;
+
+    if (aTargetPlayerId != 0)
+    {
+        const auto& cMembers = cPartyService.GetPartyMembers();
+        if (std::find(cMembers.begin(), cMembers.end(), aTargetPlayerId) == cMembers.end() || aTargetPlayerId == World::Get().GetTransport().GetLocalPlayerId())
+            return SendResult::NotInParty;
+    }
 
     // The state may have changed by the time the main thread gets to it, in which case the message is dropped
     World::Get().GetRunner().Queue(
