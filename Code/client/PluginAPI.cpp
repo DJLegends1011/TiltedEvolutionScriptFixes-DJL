@@ -1,17 +1,11 @@
-#include <cstdint>
-
-namespace SkyrimTogetherAPI
-{
-enum class InterfaceVersion : uint8_t
-{
-    V1 = 1
-};
-} // namespace SkyrimTogetherAPI
+#include <Services/PluginService.h>
 
 // Looked up by SKSE plugins with GetProcAddress(GetModuleHandleW(nullptr), "RequestPluginAPI").
 // ExeLoader::Load restores the export directory so the main module still exposes it.
 extern "C" __declspec(dllexport) void* RequestPluginAPI(SkyrimTogetherAPI::InterfaceVersion aVersion)
 {
-    (void)aVersion;
-    return nullptr;
+    if (aVersion != SkyrimTogetherAPI::InterfaceVersion::V1)
+        return nullptr;
+
+    return static_cast<SkyrimTogetherAPI::IVSkyrimTogether1*>(&PluginService::Get());
 }
