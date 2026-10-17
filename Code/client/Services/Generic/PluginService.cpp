@@ -78,14 +78,14 @@ SendResult PluginService::Queue(ChannelHandle aChannel, uint32_t aTargetPlayerId
     if (!entt::locator<World>::has_value() || !World::Get().GetTransport().IsOnline())
         return SendResult::NotConnected;
 
-    const auto& cPartyService = World::Get().GetPartyService();
-    if (!cPartyService.IsInParty())
+    if (!World::Get().GetPartyService().IsInParty())
         return SendResult::NotInParty;
 
     if (aTargetPlayerId != 0)
     {
-        const auto& cMembers = cPartyService.GetPartyMembers();
-        if (std::find(cMembers.begin(), cMembers.end(), aTargetPlayerId) == cMembers.end() || aTargetPlayerId == World::Get().GetTransport().GetLocalPlayerId())
+        std::lock_guard cLock(m_lock);
+
+        if (!std::binary_search(m_members.begin(), m_members.end(), aTargetPlayerId))
             return SendResult::NotInParty;
     }
 
@@ -126,4 +126,45 @@ void PluginService::OnNotifyModMessage(const NotifyModMessage& acMessage) noexce
     // No plugin registered that channel on this client: nothing to do
     if (onMessage)
         onMessage(acMessage.SenderPlayerId, acMessage.Data.data(), acMessage.Data.size());
+}
+
+void PluginService::NotifyPartyChanges() noexcept
+{
+    const uint32_t cLocalId = GetLocalPlayerId();
+    const auto& cParty = World::Get().GetPartyService();
+
+    Vector<uint32_t> members;
+    if (cParty.IsInParty())
+    {
+        for (const uint32_t cId : cParty.GetPartyMembers())
+        {
+            if (cId != cLocalId)
+                members.push_back(cId);
+        }
+    }
+    std::sort(members.begin(), members.end());
+
+    Vector<uint32_t> joined, left;
+    Vector<PartyChangedCallback> callbacks;
+    {
+        std::lock_guard cLock(m_lock);
+
+        std::set_difference(members.begin(), members.end(), m_members.begin(), m_members.end(), std::back_inserter(joined));
+        std::set_difference(m_members.begin(), m_members.end(), members.begin(), members.end(), std::back_inserter(left));
+        m_members = members;
+
+        for (const Channel& cChannel : m_channels)
+        {
+            if (cChannel.OnPartyChanged)
+                callbacks.push_back(cChannel.OnPartyChanged);
+        }
+    }
+
+    for (const PartyChangedCallback cCallback : callbacks)
+    {
+        for (const uint32_t cId : joined)
+            cCallback(cId, true);
+        for (const uint32_t cId : left)
+            cCallback(cId, false);
+    }
 }

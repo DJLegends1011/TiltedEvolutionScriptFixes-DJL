@@ -28,8 +28,16 @@ struct PluginService final : SkyrimTogetherAPI::IVSkyrimTogether1
      */
     void OnNotifyModMessage(const NotifyModMessage& acMessage) noexcept;
 
+    /**
+     * @brief Any event after which PartyService's member list may have changed. Runs on the main thread.
+     */
+    template <class T> void OnPartyEvent(const T&) noexcept { NotifyPartyChanges(); }
+
 private:
     PluginService() = default;
+
+    // Compares the party members with the last ones seen and tells every channel about the difference
+    void NotifyPartyChanges() noexcept;
 
     struct Channel
     {
@@ -44,4 +52,6 @@ private:
     mutable std::mutex m_lock;
     // A handle is the index in here plus one
     Vector<Channel> m_channels;
+    // The other party members as of the last change, sorted. Lets any thread check a SendTo target.
+    Vector<uint32_t> m_members;
 };
