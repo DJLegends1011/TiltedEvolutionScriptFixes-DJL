@@ -24,12 +24,12 @@ struct PluginService final : SkyrimTogetherAPI::IVSkyrimTogether1
     bool IsInParty() const noexcept override;
 
     /**
-     * @brief Hands a relayed Mod Message to the plugin on its channel, if any. Runs on the main thread.
+     * @brief Hands a relayed Mod Message to the plugin on its channel, if any. Runs during the World update.
      */
     void OnNotifyModMessage(const NotifyModMessage& acMessage) noexcept;
 
     /**
-     * @brief Any event after which PartyService's member list may have changed. Runs on the main thread.
+     * @brief Any event after which PartyService's member list may have changed. Runs during the World update.
      */
     template <class T> void OnPartyEvent(const T&) noexcept { NotifyPartyChanges(); }
 
@@ -46,7 +46,7 @@ private:
         SkyrimTogetherAPI::PartyChangedCallback OnPartyChanged;
     };
 
-    // Validates on the calling thread, then sends from the main thread. aTargetPlayerId 0 means the whole party.
+    // Validates on the calling thread, then sends during the World update. aTargetPlayerId 0 means the whole party.
     SkyrimTogetherAPI::SendResult Queue(SkyrimTogetherAPI::ChannelHandle aChannel, uint32_t aTargetPlayerId, const char* apBytes, size_t aLength) noexcept;
 
     mutable std::mutex m_lock;

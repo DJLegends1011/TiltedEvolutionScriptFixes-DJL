@@ -38,9 +38,13 @@ constexpr size_t kMaxChannelNameSize = 64;
 
 using ChannelHandle = uint32_t; // 0 is invalid
 
-// Called on the game's main thread. aSenderId is the player ID the server saw the message come from.
+// Both callbacks run during Skyrim Together's per-frame update, where its own sync code runs. That is not
+// necessarily the game's main thread, and the thread can differ between calls. To change game state from the
+// main thread, hand the work over with SKSE's task interface (SKSE::GetTaskInterface()->AddTask).
+
+// aSenderId is the player ID the server saw the message come from.
 using MessageCallback = void (*)(uint32_t aSenderId, const char* apBytes, size_t aLength);
-// Called on the game's main thread when a player joins (aJoined) or leaves the local player's party.
+// A player joined (aJoined) or left the local player's party.
 using PartyChangedCallback = void (*)(uint32_t aPlayerId, bool aJoined);
 
 class IVSkyrimTogether1

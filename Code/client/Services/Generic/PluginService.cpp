@@ -89,7 +89,7 @@ SendResult PluginService::Queue(ChannelHandle aChannel, uint32_t aTargetPlayerId
             return SendResult::NotInParty;
     }
 
-    // The state may have changed by the time the main thread gets to it, in which case the message is dropped
+    // The state may have changed by the time the World update gets to it, in which case the message is dropped
     World::Get().GetRunner().Queue(
         [channelName = std::move(channelName), aTargetPlayerId, data = String(apBytes ? apBytes : "", apBytes ? aLength : 0)]()
         {
